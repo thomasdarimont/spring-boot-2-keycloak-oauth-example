@@ -100,7 +100,7 @@ class WebSecurityConfig {
 	@Bean
 	KeycloakOauth2UserService keycloakOidcUserService(OAuth2ClientProperties oauth2ClientProperties) {
 
-		// todo use default JwtDecoder
+		//TODO use default JwtDecoder - where to grab?
 		NimbusJwtDecoderJwkSupport jwtDecoder = new NimbusJwtDecoderJwkSupport(
 				oauth2ClientProperties.getProvider().get("keycloak").getJwkSetUri());
 
@@ -163,7 +163,7 @@ class KeycloakOauth2UserService extends OidcUserService {
 		}
 
 		// Would be great if Spring Security would provide something like a plugable
-		// OidcUserRequestAuthoritiesExtractor interface
+		// OidcUserRequestAuthoritiesExtractor interface to hide the junk below...
 
 		@SuppressWarnings("unchecked")
 		Map<String, Object> resourceMap = (Map<String, Object>) token.getClaims().get("resource_access");
@@ -171,7 +171,11 @@ class KeycloakOauth2UserService extends OidcUserService {
 
 		@SuppressWarnings("unchecked")
 		Map<String, Map<String, Object>> clientResource = (Map<String, Map<String, Object>>) resourceMap.get(clientId);
-
+		if (CollectionUtils.isEmpty(clientResource)) {
+			return Collections.emptyList();
+		}
+		
+		@SuppressWarnings("unchecked")
 		List<String> clientRoles = (List<String>) clientResource.get("roles");
 		if (CollectionUtils.isEmpty(clientRoles)) {
 			return Collections.emptyList();
@@ -186,6 +190,11 @@ class KeycloakOauth2UserService extends OidcUserService {
 	}
 }
 
+/**
+ * Propagates logouts to Keycloak.
+ * 
+ * Necessary because Spring Security 5 (currently) doesn't support end-session-endpoints.
+ */
 @Slf4j
 @RequiredArgsConstructor
 class KeycloakLogoutHandler extends SecurityContextLogoutHandler {
