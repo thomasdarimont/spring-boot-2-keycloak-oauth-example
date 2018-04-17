@@ -24,7 +24,8 @@ spring:
             authorization-uri: ${kc.realm-url}/protocol/openid-connect/auth
             jwk-set-uri: ${kc.realm-url}/protocol/openid-connect/certs
             token-uri: ${kc.realm-url}/protocol/openid-connect/token
-            
+# would be cool if there was a end-session-uri to propagate logouts 
+
 #  User info endpoint not needed since Keycloak uses self-contained value tokens
 #            user-info-uri: ${kc.realm-url}/protocol/openid-connect/userinfo
             user-name-attribute: preferred_username
