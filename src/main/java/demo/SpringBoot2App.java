@@ -19,7 +19,6 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.security.oauth2.client.OAuth2ClientProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
@@ -54,6 +53,7 @@ import org.springframework.web.servlet.ModelAndView;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @SpringBootApplication
 public class SpringBoot2App {
@@ -85,12 +85,10 @@ class WebSecurityConfig {
 						// or allow everything a I did and then use method based security
 						// like in the controller below
 						.authorizeRequests().anyRequest().permitAll().and()
-
+						// Propagate logouts via /logout to Keycloak
 						.logout().addLogoutHandler(keycloakLogoutHandler).and()
-
 						// This is the point where OAuth2 login of Spring 5 gets enabled
 						.oauth2Login().userInfoEndpoint().oidcUserService(keycloakOidcUserService).and()
-
 						// I don't want a page with different clients as login options
 						// So i use the constant from OAuth2AuthorizationRequestRedirectFilter
 						// plus the configured realm as immediate redirect to Keycloak
@@ -102,7 +100,7 @@ class WebSecurityConfig {
 	@Bean
 	KeycloakOauth2UserService keycloakOidcUserService(OAuth2ClientProperties oauth2ClientProperties) {
 
-		// todo use default JwtDecoder 
+		// todo use default JwtDecoder
 		NimbusJwtDecoderJwkSupport jwtDecoder = new NimbusJwtDecoderJwkSupport(
 				oauth2ClientProperties.getProvider().get("keycloak").getJwkSetUri());
 
@@ -114,7 +112,7 @@ class WebSecurityConfig {
 
 	@Bean
 	KeycloakLogoutHandler keycloakLogoutHandler() {
-		return new KeycloakLogoutHandler();
+		return new KeycloakLogoutHandler(new RestTemplate());
 	}
 }
 
@@ -164,8 +162,9 @@ class KeycloakOauth2UserService extends OidcUserService {
 			throw new OAuth2AuthenticationException(INVALID_REQUEST, e);
 		}
 
-		// Would be great if Spring Security would provide something like a plugable OidcUserRequestAuthoritiesExtractor interface
-		
+		// Would be great if Spring Security would provide something like a plugable
+		// OidcUserRequestAuthoritiesExtractor interface
+
 		@SuppressWarnings("unchecked")
 		Map<String, Object> resourceMap = (Map<String, Object>) token.getClaims().get("resource_access");
 		String clientId = userRequest.getClientRegistration().getClientId();
@@ -187,7 +186,11 @@ class KeycloakOauth2UserService extends OidcUserService {
 	}
 }
 
+@Slf4j
+@RequiredArgsConstructor
 class KeycloakLogoutHandler extends SecurityContextLogoutHandler {
+
+	private final RestTemplate restTemplate;
 
 	@Override
 	public void logout(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
@@ -203,13 +206,11 @@ class KeycloakLogoutHandler extends SecurityContextLogoutHandler {
 		UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(endSessionEndpoint) //
 				.queryParam("id_token_hint", user.getIdToken().getTokenValue());
 
-		RestTemplate rt = new RestTemplate();
-
-		ResponseEntity<String> logoutResponse = rt.getForEntity(builder.toUriString(), String.class);
-		if (logoutResponse.getStatusCode() == HttpStatus.OK) {
-			System.out.println("Successfulley logged out in Keycloak");
+		ResponseEntity<String> logoutResponse = restTemplate.getForEntity(builder.toUriString(), String.class);
+		if (logoutResponse.getStatusCode().is2xxSuccessful()) {
+			log.info("Successfulley logged out in Keycloak");
 		} else {
-			System.out.println("Could not propagate logout to Keycloak");
+			log.info("Could not propagate logout to Keycloak");
 		}
 	}
 }
@@ -244,7 +245,7 @@ class DemoController {
 
 		OidcUser user = (OidcUser) authToken.getPrincipal();
 
-		// Provides a back link to the application
+		// Provides a back-link to the application
 		return "redirect:" + user.getIssuer() + "/account?referrer=" + user.getIdToken().getAuthorizedParty();
 	}
 }
