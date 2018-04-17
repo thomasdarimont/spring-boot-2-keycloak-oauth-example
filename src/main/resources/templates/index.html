@@ -13,7 +13,7 @@
 		<li th:if="${principal}"><a href="#" th:href="@{/account}">Account</a></li>
 	</ul>
 
-	<form action="logout" method="post">
+	<form action="logout" method="post" th:if="${principal}">
 		<input type="hidden" th:name="${_csrf.parameterName}"
 			th:value="${_csrf.token}" />
 
