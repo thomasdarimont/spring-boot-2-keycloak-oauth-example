@@ -110,7 +110,7 @@ class WebSecurityConfig {
 	KeycloakOauth2UserService keycloakOidcUserService(OAuth2ClientProperties oauth2ClientProperties) {
 
 		// TODO use default JwtDecoder - where to grab?
-		JwtDecoder jwtDecoder = new DynamicJwtDecoderSelector(oauth2ClientProperties);
+		JwtDecoder jwtDecoder = new TenantAwareDynamicJwtDecoder(oauth2ClientProperties);
 
 		SimpleAuthorityMapper authoritiesMapper = new SimpleAuthorityMapper();
 		authoritiesMapper.setConvertToUpperCase(true);
@@ -124,12 +124,12 @@ class WebSecurityConfig {
 	}
 }
 
-class DynamicJwtDecoderSelector implements JwtDecoder {
+class TenantAwareDynamicJwtDecoder implements JwtDecoder {
 
 	private final NimbusJwtDecoderJwkSupport defaultJwtDecoder;
 	private final NimbusJwtDecoderJwkSupport demo2JwtDecoder;
 
-	public DynamicJwtDecoderSelector(OAuth2ClientProperties oauth2ClientProperties) {
+	public TenantAwareDynamicJwtDecoder(OAuth2ClientProperties oauth2ClientProperties) {
 		// TODO hard coded tenant aware jwt decoders for now... replace with lazily
 		// computed cache
 
@@ -301,9 +301,15 @@ class DemoController {
 		return "redirect:" + user.getIssuer() + "/account?referrer=" + user.getIdToken().getAuthorizedParty();
 	}
 
+	/**
+	 * Determines the login route to use based on the Host header.
+	 * @param request
+	 * @return
+	 */
 	@GetMapping("/login-redirector")
 	public String loginRedirect(HttpServletRequest request) {
 
+		//TODO use proper subdomain extraction
 		if (request.getServerName().startsWith("demo2.")) {
 			return "redirect:" + DEFAULT_AUTHORIZATION_REQUEST_BASE_URI + "/demo2";
 		}
