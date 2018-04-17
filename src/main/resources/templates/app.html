@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>App</title>
+</head>
+<body>
+	<h1>My cool App</h1>
+	<div th:if="${principal}">
+		<p th:text="${principal.getName()}">Current User</p>
+	</div>
+	<a href="/">Home</a>
+</body>
+</html>

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:th="http://www.thymeleaf.org"
+	xmlns:sec="http://www.thymeleaf.org/extras/spring-security">
+<head>
+<title>Demo App</title>
+</head>
+<body>
+	<ul>
+		<li><a href="#" th:href="@{/protected}">App</a></li>
+		<li sec:authorize="hasRole('ROLE_ADMIN')"><a href="#"
+			th:href="@{/admin}">Admin</a></li>
+		<li th:if="${principal}"><a href="#" th:href="@{/account}">Account</a></li>
+	</ul>
+
+	<form action="logout" method="post">
+		<input type="hidden" th:name="${_csrf.parameterName}"
+			th:value="${_csrf.token}" />
+
+		<button>Logout</button>
+	</form>
+</body>
+</html>

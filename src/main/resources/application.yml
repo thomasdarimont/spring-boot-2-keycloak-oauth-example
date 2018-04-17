@@ -1,0 +1,30 @@
+server:
+  port: 8082
+
+kc:
+  base-url: http://localhost:8080/auth
+  realm: demo
+  realm-url: ${kc.base-url}/realms/${kc.realm}
+
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          demo:
+            client-id: app-demo
+            client-name: Demo App
+            client-secret: e3f519b4-0272-4261-9912-8b7453ac4ecd
+            provider: keycloak
+            authorization-grant-type: authorization_code
+            scope: openid, profile
+            redirect-uri-template: "{baseUrl}/login/oauth2/code/{registrationId}"
+        provider:
+          keycloak:
+            authorization-uri: ${kc.realm-url}/protocol/openid-connect/auth
+            jwk-set-uri: ${kc.realm-url}/protocol/openid-connect/certs
+            token-uri: ${kc.realm-url}/protocol/openid-connect/token
+            
+#  User info endpoint not needed since Keycloak uses self-contained value tokens
+#            user-info-uri: ${kc.realm-url}/protocol/openid-connect/userinfo
+            user-name-attribute: preferred_username
