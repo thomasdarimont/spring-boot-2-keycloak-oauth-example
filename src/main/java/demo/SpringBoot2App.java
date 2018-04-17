@@ -13,7 +13,6 @@ import java.util.Set;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.autoconfigure.security.oauth2.client.OAuth2ClientProperties;
@@ -34,6 +33,8 @@ import org.springframework.security.core.authority.mapping.SimpleAuthorityMapper
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
@@ -49,6 +50,8 @@ import org.springframework.ui.Model;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.servlet.ModelAndView;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -69,7 +72,6 @@ class WebSecurityConfig {
 
 	@Bean
 	public WebSecurityConfigurerAdapter webSecurityConfigurer( //
-			@Value("${kc.realm}") String realm, //
 			KeycloakOauth2UserService keycloakOidcUserService, //
 			KeycloakLogoutHandler keycloakLogoutHandler //
 	) {
@@ -92,17 +94,23 @@ class WebSecurityConfig {
 						// I don't want a page with different clients as login options
 						// So i use the constant from OAuth2AuthorizationRequestRedirectFilter
 						// plus the configured realm as immediate redirect to Keycloak
-						.loginPage(DEFAULT_AUTHORIZATION_REQUEST_BASE_URI + "/" + realm);
+						// .loginPage(DEFAULT_AUTHORIZATION_REQUEST_BASE_URI + "/" + realm);
+						.loginPage("/login-redirector");
+
 			}
 		};
 	}
 
 	@Bean
+	Object foo(ClientRegistrationRepository clientRegistrationRepository) {
+		return new OAuth2AuthorizationRequestRedirectFilter(clientRegistrationRepository);
+	}
+
+	@Bean
 	KeycloakOauth2UserService keycloakOidcUserService(OAuth2ClientProperties oauth2ClientProperties) {
 
-		//TODO use default JwtDecoder - where to grab?
-		NimbusJwtDecoderJwkSupport jwtDecoder = new NimbusJwtDecoderJwkSupport(
-				oauth2ClientProperties.getProvider().get("keycloak").getJwkSetUri());
+		// TODO use default JwtDecoder - where to grab?
+		JwtDecoder jwtDecoder = new DynamicJwtDecoderSelector(oauth2ClientProperties);
 
 		SimpleAuthorityMapper authoritiesMapper = new SimpleAuthorityMapper();
 		authoritiesMapper.setConvertToUpperCase(true);
@@ -114,6 +122,40 @@ class WebSecurityConfig {
 	KeycloakLogoutHandler keycloakLogoutHandler() {
 		return new KeycloakLogoutHandler(new RestTemplate());
 	}
+}
+
+class DynamicJwtDecoderSelector implements JwtDecoder {
+
+	private final NimbusJwtDecoderJwkSupport defaultJwtDecoder;
+	private final NimbusJwtDecoderJwkSupport demo2JwtDecoder;
+
+	public DynamicJwtDecoderSelector(OAuth2ClientProperties oauth2ClientProperties) {
+		// TODO hard coded tenant aware jwt decoders for now... replace with lazily
+		// computed cache
+
+		this.defaultJwtDecoder = new NimbusJwtDecoderJwkSupport(
+				oauth2ClientProperties.getProvider().get("keycloak").getJwkSetUri());
+		this.demo2JwtDecoder = new NimbusJwtDecoderJwkSupport(
+				oauth2ClientProperties.getProvider().get("keycloak-demo2").getJwkSetUri());
+	}
+
+	@Override
+	public Jwt decode(String token) throws JwtException {
+		return selectDecoder().decode(token);
+	}
+
+	private JwtDecoder selectDecoder() {
+
+		HttpServletRequest request = ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes())
+				.getRequest();
+
+		if (request.getServerName().startsWith("demo2.")) {
+			return demo2JwtDecoder;
+		}
+
+		return defaultJwtDecoder;
+	}
+
 }
 
 @RequiredArgsConstructor
@@ -174,7 +216,7 @@ class KeycloakOauth2UserService extends OidcUserService {
 		if (CollectionUtils.isEmpty(clientResource)) {
 			return Collections.emptyList();
 		}
-		
+
 		@SuppressWarnings("unchecked")
 		List<String> clientRoles = (List<String>) clientResource.get("roles");
 		if (CollectionUtils.isEmpty(clientRoles)) {
@@ -193,7 +235,8 @@ class KeycloakOauth2UserService extends OidcUserService {
 /**
  * Propagates logouts to Keycloak.
  * 
- * Necessary because Spring Security 5 (currently) doesn't support end-session-endpoints.
+ * Necessary because Spring Security 5 (currently) doesn't support
+ * end-session-endpoints.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -256,5 +299,15 @@ class DemoController {
 
 		// Provides a back-link to the application
 		return "redirect:" + user.getIssuer() + "/account?referrer=" + user.getIdToken().getAuthorizedParty();
+	}
+
+	@GetMapping("/login-redirector")
+	public String loginRedirect(HttpServletRequest request) {
+
+		if (request.getServerName().startsWith("demo2.")) {
+			return "redirect:" + DEFAULT_AUTHORIZATION_REQUEST_BASE_URI + "/demo2";
+		}
+
+		return "redirect:" + DEFAULT_AUTHORIZATION_REQUEST_BASE_URI + "/demo";
 	}
 }

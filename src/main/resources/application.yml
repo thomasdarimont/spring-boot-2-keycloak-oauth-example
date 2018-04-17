@@ -3,8 +3,6 @@ server:
 
 kc:
   base-url: http://localhost:8080/auth
-  realm: demo
-  realm-url: ${kc.base-url}/realms/${kc.realm}
 
 spring:
   security:
@@ -19,13 +17,27 @@ spring:
             authorization-grant-type: authorization_code
             scope: openid, profile
             redirect-uri-template: "{baseUrl}/login/oauth2/code/{registrationId}"
+
+          demo2:
+            client-id: app-demo2
+            client-name: Demo App
+            client-secret: b4025687-d453-4b6d-9b90-250b291021a4
+            provider: keycloak-demo2
+            authorization-grant-type: authorization_code
+            scope: openid, profile
+            redirect-uri-template: "http://demo2.tdlabs.local:8082/login/oauth2/code/{registrationId}"
         provider:
           keycloak:
-            authorization-uri: ${kc.realm-url}/protocol/openid-connect/auth
-            jwk-set-uri: ${kc.realm-url}/protocol/openid-connect/certs
-            token-uri: ${kc.realm-url}/protocol/openid-connect/token
-# would be cool if there was a end-session-uri to propagate logouts 
-
+            authorization-uri: ${kc.base-url}/realms/demo/protocol/openid-connect/auth
+            jwk-set-uri: ${kc.base-url}/realms/demo/protocol/openid-connect/certs
+            token-uri: ${kc.base-url}/realms/demo/protocol/openid-connect/token
+# would be cool if there was a end-session-uri to propagate logouts
 #  User info endpoint not needed since Keycloak uses self-contained value tokens
-#            user-info-uri: ${kc.realm-url}/protocol/openid-connect/userinfo
+#            user-info-uri: ${kc.base-url}/realms/demo/protocol/openid-connect/userinfo
+            user-name-attribute: preferred_username
+
+          keycloak-demo2:
+            authorization-uri: ${kc.base-url}/realms/demo2/protocol/openid-connect/auth
+            jwk-set-uri: ${kc.base-url}/realms/demo2/protocol/openid-connect/certs
+            token-uri: ${kc.base-url}/realms/demo2/protocol/openid-connect/token
             user-name-attribute: preferred_username
