@@ -28,6 +28,7 @@ import org.springframework.security.config.annotation.web.configuration.WebSecur
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
 import org.springframework.security.core.authority.mapping.SimpleAuthorityMapper;
@@ -48,7 +49,6 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.CollectionUtils;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.ModelAndView;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -70,7 +70,7 @@ class WebSecurityConfig {
 	@Bean
 	public WebSecurityConfigurerAdapter webSecurityConfigurer( //
 			@Value("${kc.realm}") String realm, //
-			OidcUserService oidcUserService, //
+			KeycloakOauth2UserService keycloakOidcUserService, //
 			KeycloakLogoutHandler keycloakLogoutHandler //
 	) {
 		return new WebSecurityConfigurerAdapter() {
@@ -89,7 +89,7 @@ class WebSecurityConfig {
 						.logout().addLogoutHandler(keycloakLogoutHandler).and()
 
 						// This is the point where OAuth2 login of Spring 5 gets enabled
-						.oauth2Login().userInfoEndpoint().oidcUserService(oidcUserService).and()
+						.oauth2Login().userInfoEndpoint().oidcUserService(keycloakOidcUserService).and()
 
 						// I don't want a page with different clients as login options
 						// So i use the constant from OAuth2AuthorizationRequestRedirectFilter
@@ -100,8 +100,9 @@ class WebSecurityConfig {
 	}
 
 	@Bean
-	OidcUserService oidcUserService(OAuth2ClientProperties oauth2ClientProperties) {
+	KeycloakOauth2UserService keycloakOidcUserService(OAuth2ClientProperties oauth2ClientProperties) {
 
+		// todo use default JwtDecoder 
 		NimbusJwtDecoderJwkSupport jwtDecoder = new NimbusJwtDecoderJwkSupport(
 				oauth2ClientProperties.getProvider().get("keycloak").getJwkSetUri());
 
@@ -163,6 +164,8 @@ class KeycloakOauth2UserService extends OidcUserService {
 			throw new OAuth2AuthenticationException(INVALID_REQUEST, e);
 		}
 
+		// Would be great if Spring Security would provide something like a plugable OidcUserRequestAuthoritiesExtractor interface
+		
 		@SuppressWarnings("unchecked")
 		Map<String, Object> resourceMap = (Map<String, Object>) token.getClaims().get("resource_access");
 		String clientId = userRequest.getClientRegistration().getClientId();
@@ -233,49 +236,15 @@ class DemoController {
 	}
 
 	@GetMapping("/account")
-	public String redirectToAccountPage(Principal principal) {
+	public String redirectToAccountPage(@AuthenticationPrincipal OAuth2AuthenticationToken authToken) {
 
-		if (principal == null) {
+		if (authToken == null) {
 			return "redirect:/";
 		}
 
-		OidcUser user = extractOidcUser(principal);
+		OidcUser user = (OidcUser) authToken.getPrincipal();
 
 		// Provides a back link to the application
 		return "redirect:" + user.getIssuer() + "/account?referrer=" + user.getIdToken().getAuthorizedParty();
-	}
-
-	@PostMapping("/custom-logout")
-	public String logout(HttpServletRequest request, HttpServletResponse response, Principal principal)
-			throws Exception {
-
-		propagateLogoutToKeycloak(principal);
-
-		new SecurityContextLogoutHandler().logout(request, response, null);
-
-		return "redirect:/";
-	}
-
-	private void propagateLogoutToKeycloak(Principal principal) {
-
-		OidcUser user = extractOidcUser(principal);
-		String endSessionEndpoint = user.getIssuer() + "/protocol/openid-connect/logout";
-
-		UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(endSessionEndpoint) //
-				.queryParam("id_token_hint", user.getIdToken().getTokenValue());
-
-		RestTemplate rt = new RestTemplate();
-
-		ResponseEntity<String> logoutResponse = rt.getForEntity(builder.toUriString(), String.class);
-		if (logoutResponse.getStatusCode() == HttpStatus.OK) {
-			System.out.println("Successfulley logged out in Keycloak");
-		} else {
-			System.out.println("Could not propagate logout to Keycloak");
-		}
-	}
-
-	private OidcUser extractOidcUser(Principal principal) {
-		OAuth2AuthenticationToken oauth2AuthToken = (OAuth2AuthenticationToken) principal;
-		return (OidcUser) oauth2AuthToken.getPrincipal();
 	}
 }
