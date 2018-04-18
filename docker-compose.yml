@@ -1,0 +1,17 @@
+version: '3.1'
+services:
+    keycloak:
+        image: jboss/keycloak:latest
+        restart: always
+        command: [
+          "-b", 
+          "0.0.0.0", 
+          "-Dkeycloak.migration.action=import", 
+          "-Dkeycloak.migration.provider=singleFile", 
+          "-Dkeycloak.migration.file=/opt/jboss/keycloak/realm-config/demo-realm.json", 
+          "-Dkeycloak.migration.strategy=OVERWRITE_EXISTING"
+          ]
+        volumes:
+            - ./demo-realm.json:/opt/jboss/keycloak/realm-config/demo-realm.json
+        ports:
+            - 8080:8080
