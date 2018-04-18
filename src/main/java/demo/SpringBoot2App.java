@@ -100,7 +100,7 @@ class WebSecurityConfig {
 	@Bean
 	KeycloakOauth2UserService keycloakOidcUserService(OAuth2ClientProperties oauth2ClientProperties) {
 
-		//TODO use default JwtDecoder - where to grab?
+		// TODO use default JwtDecoder - where to grab?
 		NimbusJwtDecoderJwkSupport jwtDecoder = new NimbusJwtDecoderJwkSupport(
 				oauth2ClientProperties.getProvider().get("keycloak").getJwkSetUri());
 
@@ -154,13 +154,7 @@ class KeycloakOauth2UserService extends OidcUserService {
 	 */
 	private Collection<? extends GrantedAuthority> extractKeycloakAuthorities(OidcUserRequest userRequest) {
 
-		Jwt token = null;
-		try {
-			// Token is already verified by spring security infrastructure
-			token = jwtDecoder.decode(userRequest.getAccessToken().getTokenValue());
-		} catch (JwtException e) {
-			throw new OAuth2AuthenticationException(INVALID_REQUEST, e);
-		}
+		Jwt token = parseJwt(userRequest.getAccessToken().getTokenValue());
 
 		// Would be great if Spring Security would provide something like a plugable
 		// OidcUserRequestAuthoritiesExtractor interface to hide the junk below...
@@ -174,7 +168,7 @@ class KeycloakOauth2UserService extends OidcUserService {
 		if (CollectionUtils.isEmpty(clientResource)) {
 			return Collections.emptyList();
 		}
-		
+
 		@SuppressWarnings("unchecked")
 		List<String> clientRoles = (List<String>) clientResource.get("roles");
 		if (CollectionUtils.isEmpty(clientRoles)) {
@@ -183,17 +177,28 @@ class KeycloakOauth2UserService extends OidcUserService {
 
 		Collection<? extends GrantedAuthority> authorities = AuthorityUtils
 				.createAuthorityList(clientRoles.toArray(new String[0]));
-		if (authoritiesMapper != null) {
-			authorities = authoritiesMapper.mapAuthorities(authorities);
+		if (authoritiesMapper == null) {
+			return authorities;
 		}
-		return authorities;
+
+		return authoritiesMapper.mapAuthorities(authorities);
+	}
+
+	private Jwt parseJwt(String accessTokenValue) {
+		try {
+			// Token is already verified by spring security infrastructure
+			return jwtDecoder.decode(accessTokenValue);
+		} catch (JwtException e) {
+			throw new OAuth2AuthenticationException(INVALID_REQUEST, e);
+		}
 	}
 }
 
 /**
  * Propagates logouts to Keycloak.
  * 
- * Necessary because Spring Security 5 (currently) doesn't support end-session-endpoints.
+ * Necessary because Spring Security 5 (currently) doesn't support
+ * end-session-endpoints.
  */
 @Slf4j
 @RequiredArgsConstructor
@@ -212,7 +217,8 @@ class KeycloakLogoutHandler extends SecurityContextLogoutHandler {
 
 		String endSessionEndpoint = user.getIssuer() + "/protocol/openid-connect/logout";
 
-		UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(endSessionEndpoint) //
+		UriComponentsBuilder builder = UriComponentsBuilder //
+				.fromUriString(endSessionEndpoint) //
 				.queryParam("id_token_hint", user.getIdToken().getTokenValue());
 
 		ResponseEntity<String> logoutResponse = restTemplate.getForEntity(builder.toUriString(), String.class);
