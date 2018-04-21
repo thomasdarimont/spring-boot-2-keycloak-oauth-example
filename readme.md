@@ -11,12 +11,20 @@ and is inspired by [this](http://info.michael-simons.eu/2017/12/28/use-keycloak-
 ## Setup
 
 Import the `demo` realm into Keycloak via
+1. Docker Keycloak
 
-```
-bin/standalone.sh -Dkeycloak.migration.action=import
--Dkeycloak.migration.provider=singleFile -Dkeycloak.migration.file=/path/to/demo-realm.json
--Dkeycloak.migration.strategy=OVERWRITE_EXISTING
-```
+    ```
+    docker-compose up
+    ```
+
+1. Existing Standalone Keycloak
+
+
+    ```
+    bin/standalone.sh -Dkeycloak.migration.action=import
+    -Dkeycloak.migration.provider=singleFile -Dkeycloak.migration.file=/path/to/demo-realm.json
+    -Dkeycloak.migration.strategy=OVERWRITE_EXISTING
+    ```
 
 Keycloak is assumed to run on port 8080 on localhost.  
 The demo realm contains two users `tester` and `admin` both with password `test`.
