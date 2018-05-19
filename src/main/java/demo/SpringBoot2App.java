@@ -2,6 +2,7 @@ package demo;
 
 import static org.springframework.security.oauth2.client.web.OAuth2AuthorizationRequestRedirectFilter.DEFAULT_AUTHORIZATION_REQUEST_BASE_URI;
 
+import java.lang.reflect.Field;
 import java.security.Principal;
 import java.util.Collection;
 import java.util.Collections;
@@ -16,7 +17,6 @@ import javax.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.security.oauth2.client.OAuth2ClientProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +25,7 @@ import org.springframework.security.config.annotation.method.configuration.Enabl
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.config.oauth2.client.oidc.OidcConfigurationProvider;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -34,6 +35,11 @@ import org.springframework.security.core.authority.mapping.SimpleAuthorityMapper
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserRequest;
 import org.springframework.security.oauth2.client.oidc.userinfo.OidcUserService;
+import org.springframework.security.oauth2.client.registration.ClientRegistration;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.client.registration.InMemoryClientRegistrationRepository;
+import org.springframework.security.oauth2.client.registration.InMemoryReactiveClientRegistrationRepository;
+import org.springframework.security.oauth2.client.registration.ReactiveClientRegistrationRepository;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
@@ -47,6 +53,7 @@ import org.springframework.security.web.authentication.logout.SecurityContextLog
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.CollectionUtils;
+import org.springframework.util.ReflectionUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.ModelAndView;
@@ -60,12 +67,45 @@ public class SpringBoot2App {
 
 	public static void main(String[] args) {
 		SpringApplication.run(SpringBoot2App.class, args);
+
+		// ClientRegistration keycloak = OidcConfigurationProvider //
+		// .issuer("http://sso.tdlabs.local:8080/auth/realms/demo2") //
+		// .clientId("app-demo") //
+		// .clientSecret("e3f519b4-0272-4261-9912-8b7453ac4ecd") //
+		// .build();
+		//
+		// System.out.println(keycloak);
 	}
 }
 
 @Configuration
 @EnableGlobalMethodSecurity(prePostEnabled = true)
 class WebSecurityConfig {
+
+	@Bean
+	ClientRegistrationRepository clientRegistrationRepository() {
+
+		ClientRegistration demo = OidcConfigurationProvider //
+				// TODO ask Rob to add a builder method / parameter for registrationId
+				.issuer("http://sso.tdlabs.local:8080/auth/realms/demo") //
+				.clientId("app-demo") //
+				.clientSecret("e3f519b4-0272-4261-9912-8b7453ac4ecd") //
+				.clientName("keycloak:demo") //
+				.userNameAttributeName("preferred_username") //
+				.scope("openid", "profile") //
+				.build();
+		
+		// registration id defaults to hostname if issuer...
+		// currently not configureable, but this is the same for
+		// provider that use path based multi-tenancy strategy.
+		
+		//Hack change registrationId via reflection
+		Field registrationIdField = ReflectionUtils.findField(ClientRegistration.class, "registrationId");
+		ReflectionUtils.makeAccessible(registrationIdField);
+		ReflectionUtils.setField(registrationIdField, demo, "demo");
+
+		return new InMemoryClientRegistrationRepository(demo);
+	}
 
 	@Bean
 	public WebSecurityConfigurerAdapter webSecurityConfigurer( //
@@ -98,11 +138,17 @@ class WebSecurityConfig {
 	}
 
 	@Bean
-	KeycloakOauth2UserService keycloakOidcUserService(OAuth2ClientProperties oauth2ClientProperties) {
+	KeycloakOauth2UserService keycloakOidcUserService( //
+			// OAuth2ClientProperties oauth2ClientProperties
+			ClientRegistrationRepository clientRegistrationRepository //
+	) {
 
 		// TODO use default JwtDecoder - where to grab?
-		NimbusJwtDecoderJwkSupport jwtDecoder = new NimbusJwtDecoderJwkSupport(
-				oauth2ClientProperties.getProvider().get("keycloak").getJwkSetUri());
+		NimbusJwtDecoderJwkSupport jwtDecoder = new NimbusJwtDecoderJwkSupport(//
+				clientRegistrationRepository.findByRegistrationId("demo").getProviderDetails()
+						.getJwkSetUri() //
+		// oauth2ClientProperties.getProvider().get("keycloak:demo").getJwkSetUri()
+		);
 
 		SimpleAuthorityMapper authoritiesMapper = new SimpleAuthorityMapper();
 		authoritiesMapper.setConvertToUpperCase(true);
