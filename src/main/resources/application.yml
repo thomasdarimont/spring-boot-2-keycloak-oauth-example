@@ -2,8 +2,8 @@ server:
   port: 8082
 
 kc:
-  base-url: http://localhost:8080/auth
-  realm: demo
+  base-url: http://sso.tdlabs.local:8899/u/auth
+  realm: acme
   realm-url: ${kc.base-url}/realms/${kc.realm}
 
 spring:
@@ -11,10 +11,10 @@ spring:
     oauth2:
       client:
         registration:
-          demo:
-            client-id: app-demo
-            client-name: Demo App
-            client-secret: e3f519b4-0272-4261-9912-8b7453ac4ecd
+          acme:
+            client-id: app-springboot2-springsecurity-plain
+            client-name: Spring Boot 2 Demo App
+            client-secret: 6acfcb6d-ad39-4de4-9984-4116f9229e5d
             provider: keycloak
             authorization-grant-type: authorization_code
             scope: openid, profile
